@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onefile --windowed --name "RpiDeck" --clean --add-data "D:/Programming Projects/Python/RPIStreamDeck/client/backend/index.html;." --hidden-import "commands.obs" --hidden-import "commands.desktop"  "D:/Programming Projects/Python/RPIStreamDeck/client/backend/main.py"

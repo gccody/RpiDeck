@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rpi Server</title>
+    <style>
+        :root {
+            --padding-size: 20px;
+            --gap-size: 10px;
+        }
+        html, body {
+            overflow: hidden;
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(var(--columns), 1fr); /* Use 1fr for equal column sizing */
+            grid-template-rows: repeat(var(--rows), 1fr); /* Adjust if needed */
+            gap: var(--gap-size);
+        }
+        .widget {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: black;
+            border-color: lightgray;
+            border-width: 1px;
+            border-style: solid;
+            border-radius: 5px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        .widget img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+        }
+        .widget p {
+            position: relative;
+            top: 0;
+            left: 0;
+        }
+        #grid-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        #sidebar {
+            width: 30vw;
+            height: 100%;
+            border-left: 1px solid lightgray;
+            box-sizing: border-box;
+            padding: 20px;
+            background-color: black;
+        }
+        #content {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            width: 100vw;
+            height: 100vh;
+            background-color: black;
+        }
+        .folder-content {
+            display: none;
+            list-style: none;
+            padding-left: 20px;
+        }
+        .folder {
+            cursor: pointer;
+            padding: 10px;
+            border: 1px solid lightgray;
+            background-color: #333;
+            color: white;
+        }
+        .folder:hover {
+            background-color: #555;
+        }
+        .draggable {
+            padding: 5px;
+            margin: 5px;
+            background-color: #444;
+            cursor: grab;
+        }
+        .draggable:hover {
+            background-color: #666;
+        }
+        .draggable:active {
+            cursor: grabbing;
+        }
+        .icon-drag {
+            display: inline-block;
+            margin-right: 5px;
+            transform: rotate(90deg);
+            font-style: italic; /* You might want to replace this with an actual icon */
+        }
+        #add-remove-columns-rows {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            color: white;
+        }
+        #columns, #rows {
+            width: 2vw;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+               -webkit-appearance: none;
+                margin: 0;
+        }
+
+        input[type=number] {
+            appearance: textfield;
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body>
+    <div id="content">
+        <div id="grid-container">
+            <div id="grid">
+            </div> 
+        </div>
+        <div id="sidebar">
+        </div>
+        <div id="add-remove-columns-rows">
+            <div id="add-columns">
+                Columns: 
+                <input type="number" id="columns" min="1">
+                <button id="add-column-button" onclick="addColumn()">+</button>
+                <button id="remove-column-button" onclick="removeColumn()">-</button>
+            </div>
+            <div id="add-rows">
+                Rows:
+                <input type="number" id="rows" min="1">
+                <button id="add-row-button" onclick="addRow()">+</button>
+                <button id="remove-row-button" onclick="removeRow()">-</button>
+            </div>
+        </div>
+    </div>
+    <script>
+
+        function updateColumns(columns) {
+            fetch(`http://localhost:8003/columns/${columns}`, { method: "POST" });
+        }
+
+        function updateRows(rows) {
+            fetch(`http://localhost:8003/rows/${rows}`, { method: "POST" });
+        }
+
+        function addColumn() {
+            const columns = document.getElementById("columns");
+            columns.value = parseInt(columns.value)+1;
+            updateColumns(parseInt(columns.value));
+            updateLayout();
+        }
+
+        function removeColumn() {
+            const columns = document.getElementById("columns");
+            if (parseInt(columns.value) == 1) return;
+            columns.value = parseInt(columns.value)-1;
+            updateColumns(parseInt(columns.value));
+            updateLayout();
+        }
+
+        function addRow() {
+            const rows = document.getElementById("rows");
+            rows.value = parseInt(rows.value)+1;
+            updateRows(parseInt(rows.value));
+            updateLayout();
+        }
+
+        function removeRow() {
+            const rows = document.getElementById("rows");
+            if (parseInt(rows.value) == 1) return;
+            rows.value = parseInt(rows.value)-1;
+            updateRows(parseInt(rows.value));
+            updateLayout();
+        }
+
+        function drag(ev) {
+            ev.dataTransfer.setData("text", ev.target.id);
+        }
+
+        function allowDrop(ev) {
+            ev.preventDefault();
+        }
+
+        function drop(ev) {
+            ev.preventDefault();
+            const data = ev.dataTransfer.getData("text");
+            const draggableElement = document.getElementById(data);
+
+            // Retrieve the data-params attribute from the dragged element
+            const params = JSON.parse(draggableElement.getAttribute("data-params-types"));
+            const commandName = data;
+
+            // Append the cloned element to the drop target
+            ev.target.setAttribute("data-params-types", JSON.stringify(params));
+        }
+
+        function checkGridUpdate() {
+
+        }
+
+        function updateLayout(grid_data) {
+            function updateGrid(grid_data) {
+                const grid = document.getElementById('grid');
+                grid.innerHTML = '';
+                const columns = grid_data.columns;
+                const rows = grid_data.rows;
+                const columnsInput = document.getElementById("columns");
+                const rowsInput = document.getElementById("rows");
+                columnsInput.value = columns;
+                rowsInput.value = rows;
+                const gapSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap-size'), 10);
+                const paddingSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--padding-size'), 10);
+                const gridContainerRect = document.getElementById("grid-container").getBoundingClientRect();
+
+                // Calculate grid width
+                const gridContainerWidth = gridContainerRect.width;
+                const totalGapSizeWidth = gapSize * (columns - 1) + paddingSize * 2;
+                const availableWidth = gridContainerWidth - totalGapSizeWidth;
+                const unitSizeWidth = availableWidth / columns;
+
+                // Calculate grid height
+                const gridContainerHeight = gridContainerRect.height;
+                const totalGapSizeHeight = gapSize * (rows - 1) + paddingSize * 2;
+                const availableHeight = gridContainerHeight - totalGapSizeHeight;
+                const unitSizeHeight = availableHeight / rows;
+
+                const unitSize = Math.min(unitSizeHeight, unitSizeWidth);
+
+                const totalGridWidth = unitSize * columns + gapSize * (columns - 1);
+                const totalGridHeight = unitSize * rows + gapSize * (rows - 1);
+
+                grid.style.width = `${totalGridWidth}px`;
+                grid.style.height = `${totalGridHeight}px`;
+
+                document.documentElement.style.setProperty('--base-unit', `calc(${unitSize}px - .5%)`);
+                document.documentElement.style.setProperty('--columns', columns);
+                document.documentElement.style.setProperty('--rows', rows);
+                html = ""
+                widgets = [];
+
+                for (let i = 0; i < grid_data.rows; i++) {
+                    widgets.push(new Array(grid_data.columns ?? 0).fill(0));
+                }
+
+                if (grid_data.widgets.length > 0) {
+                    for (const widget of grid_data.widgets[0]) {
+                        for (let i = widget.y; i < widget.y + widget.rowSpan; i++) {
+                            for (let j = widget.x; j < widget.x + widget.columnSpan; j++) {
+                                widgets[i-1][j-1] = 1;
+                            }
+                        }
+                    }
+                    for (const widget of grid_data.widgets[0]) {
+                        const widgetElement = document.createElement('div');
+                        widgetElement.className = "widget"
+                        widgetElement.style.gridRow = `${widget.y} / span ${widget.rowSpan}`;
+                        widgetElement.style.gridColumn = `${widget.x} / span ${widget.columnSpan}`;
+                        widgetElement.innerHTML = `<img src="${widget.image}" style="width: 100%; height: 100%;"/>`
+                        widgetElement.addEventListener('dragover', allowDrop);
+                        widgetElement.addEventListener('drop', drop);
+                        grid.appendChild(widgetElement);
+                    }
+                }
+
+                for (let i = 0; i < grid_data.rows; i++) {
+                    for (let j = 0; j < grid_data.columns; j++) {
+                        if (widgets[i][j] === 0) {
+                            const widgetElement = document.createElement('div');
+                            widgetElement.className = 'widget';
+                            widgetElement.gridRow = i+1;
+                            widgetElement.gridColumn = j+1;
+                            widgetElement.addEventListener('dragover', allowDrop);
+                            widgetElement.addEventListener('drop', drop);
+                            grid.appendChild(widgetElement);
+                        }
+                    }
+                }
+            }
+            if (grid_data) {
+                updateGrid(grid_data);
+            } else {
+                fetch("http://localhost:8003/gridData")
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(grid_data => {
+                    updateGrid(grid_data)
+                })
+                .catch(error => { 
+                    console.error(error)
+                })
+            }
+
+        }
+
+        function updateCommands() {
+            fetch("http://localhost:8003/commands")
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(commands => {
+                const sidebar = document.getElementById("sidebar");
+                sidebar.innerHTML = '';  // Clear existing content
+                for (const key of Object.keys(commands)) {
+                    const folder = document.createElement("div");
+                    folder.className = "folder";
+                    folder.innerText = key;
+                    folder.onclick = (ev) => toggleFolder(ev, key);
+                    const folderContent = document.createElement("ul");
+                    folderContent.id = key;
+                    folderContent.className = 'folder-content';
+                    for (const command of commands[key]) {
+                        const commandElement = document.createElement("li");
+                        commandElement.id = command.commandName;
+                        commandElement.className = 'draggable';
+                        commandElement.draggable = true;
+                        commandElement.ondragstart = drag;
+                        commandElement.innerHTML = `<span class="icon-drag">&#x2796;</span>${command.commandName}`;
+                        commandElement.setAttribute("data-params-types", JSON.stringify(command.params));
+                        folderContent.appendChild(commandElement);
+                    }
+                    folder.appendChild(folderContent);
+                    sidebar.appendChild(folder);
+                }
+            })
+            .catch(error => {
+                console.error(error);
+            })
+        }
+
+        function fixRowsColumnsWidth() {
+            const columns = document.getElementById('')
+        }
+
+        function toggleFolder(event, folderId) {
+            event.stopPropagation(); // Prevents the event from bubbling up the DOM tree
+
+            var folderContent = document.getElementById(folderId);
+            if (folderContent.style.display === "block") {
+                folderContent.style.display = "none";
+            } else {
+                folderContent.style.display = "block";
+            }
+        }
+        document.querySelectorAll('.folder-content li').forEach((item, index) => {
+            item.id = `draggable-item-${index}`;
+        });
+        window.addEventListener("resize", () => updateLayout());
+        updateLayout();
+        updateCommands();
+    </script>
+</body>
+</html>
